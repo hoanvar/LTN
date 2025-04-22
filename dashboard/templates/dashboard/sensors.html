@@ -28,7 +28,7 @@
                             <tbody>
                                 {% for data in sensor_data %}
                                 <tr>
-                                    <td>{{ data.timestamp|date:"Y-m-d H:i:s" }}</td>
+                                    <td>{{ data.timestamp|date:"Y-m-d H:i:s"|add_hours:7 }}</td>
                                     <td class="{% if data.heartRate|is_abnormal_heart_rate %}text-danger{% endif %}">
                                         {{ data.heartRate|floatformat:1 }}
                                     </td>
@@ -53,6 +53,34 @@
                             </tbody>
                         </table>
                     </div>
+
+                    <!-- Pagination -->
+                    {% if total_pages > 1 %}
+                    <nav aria-label="Page navigation" class="mt-4">
+                        <ul class="pagination justify-content-center">
+                            {% if current_page > 1 %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ current_page|add:'-1' }}" aria-label="Previous">
+                                    <span aria-hidden="true">&laquo;</span>
+                                </a>
+                            </li>
+                            {% endif %}
+
+                            {% for i in total_pages|get_range %}
+                            <li class="page-item {% if i == current_page %}active{% endif %}">
+                                <a class="page-link" href="?page={{ i }}">{{ i }}</a>
+                            </li>
+                            {% endfor %}
+
+                            {% if current_page < total_pages %} <li class="page-item">
+                                <a class="page-link" href="?page={{ current_page|add:'1' }}" aria-label="Next">
+                                    <span aria-hidden="true">&raquo;</span>
+                                </a>
+                                </li>
+                                {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
                 </div>
             </div>
         </div>

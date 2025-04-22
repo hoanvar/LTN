@@ -122,6 +122,9 @@ def publish_settings():
 def mqtt_loop(client):
     """Run the MQTT loop forever in a thread"""
     try:
+        print("\n=== MQTT Loop Started ===")
+        print(f"Thread ID: {threading.get_ident()}")
+        print(f"Client ID: {client._client_id}")
         client.loop_forever()
     except Exception as e:
         print(f"MQTT loop stopped: {e}")
@@ -133,12 +136,15 @@ def start_mqtt_client():
     with mqtt_lock:
         # Kiểm tra nếu đã có client đang chạy
         if mqtt_client is not None and mqtt_thread is not None and mqtt_thread.is_alive():
-            print("MQTT client already running")
+            print("\n=== MQTT client already running ===")
+            print(f"Thread ID: {mqtt_thread.ident}")
+            print(f"Thread alive: {mqtt_thread.is_alive()}")
             return True
         
         # Stop existing client if any
         if mqtt_client:
             try:
+                print("\n=== Stopping existing MQTT client ===")
                 mqtt_client.disconnect()  # This will cause loop_forever() to exit
                 
                 # Wait for thread to terminate
@@ -168,6 +174,10 @@ def start_mqtt_client():
         
         try:
             # Connect to broker
+            print("\n=== Connecting to MQTT broker ===")
+            print(f"Broker: {settings.mqtt_broker}")
+            print(f"Port: {settings.mqtt_port}")
+            print(f"Client ID: {client_id}")
             mqtt_client.connect(settings.mqtt_broker, settings.mqtt_port, 60)
             
             # Start client in a separate thread using loop_forever
@@ -176,6 +186,7 @@ def start_mqtt_client():
             mqtt_thread.start()
             
             print(f"MQTT client started successfully with client ID: {client_id}")
+            print(f"Thread ID: {mqtt_thread.ident}")
             return True
         except Exception as e:
             print(f"Error connecting to MQTT broker: {e}")

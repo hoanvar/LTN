@@ -1,0 +1,170 @@
+{% extends 'dashboard/base.html' %}
+{% load dashboard_filters %}
+
+{% block content %}
+<div class="container-fluid px-4 py-5">
+    <h1 class="mb-4">Phân tích chất lượng giấc ngủ</h1>
+
+    <div class="row">
+        <div class="col-md-12">
+            <div class="card shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="card-title mb-0">Lịch sử giấc ngủ</h5>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Thời gian bắt đầu</th>
+                                    <th>Thời gian kết thúc</th>
+                                    <th>Thời lượng (giờ)</th>
+                                    <th>Chất lượng</th>
+                                    <th>Thao tác</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for session in sessions %}
+                                <tr>
+                                    <td>{{ session.start_time|date:"Y-m-d H:i:s"|add_hours:7 }}</td>
+                                    <td>{{ session.end_time|date:"Y-m-d H:i:s"|add_hours:7|default:"-" }}</td>
+                                    <td>
+                                        {% if session.end_time %}
+                                        {{ session.end_time|timeuntil:session.start_time }}
+                                        {% else %}
+                                        -
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if session.quality == 'GOOD' %}
+                                        <span class="badge bg-success">Tốt</span>
+                                        {% elif session.quality == 'MEDIUM' %}
+                                        <span class="badge bg-warning">Trung bình</span>
+                                        {% elif session.quality == 'BAD' %}
+                                        <span class="badge bg-danger">Không tốt</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">Chưa phân tích</span>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        <a href="{% url 'aipredict:session_detail' session.id %}"
+                                            class="btn btn-sm btn-primary">
+                                            <i class="fas fa-chart-line"></i> Chi tiết
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% empty %}
+                                <tr>
+                                    <td colspan="5" class="text-center py-4">Chưa có dữ liệu giấc ngủ</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {% if is_paginated %}
+                    <nav aria-label="Page navigation" class="mt-4">
+                        <ul class="pagination justify-content-center">
+                            {% if page_obj.has_previous %}
+                            <li class="page-item">
+                                <a class="page-link" href="?page={{ page_obj.previous_page_number }}"
+                                    aria-label="Previous">
+                                    <span aria-hidden="true">&laquo;</span>
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled">
+                                <span class="page-link">&laquo;</span>
+                            </li>
+                            {% endif %}
+
+                            {% for num in paginator.page_range %}
+                            {% if page_obj.number == num %}
+                            <li class="page-item active">
+                                <span class="page-link">{{ num }}</span>
+                            </li>
+                            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %} <li
+                                class="page-item">
+                                <a class="page-link" href="?page={{ num }}">{{ num }}</a>
+                                </li>
+                                {% endif %}
+                                {% endfor %}
+
+                                {% if page_obj.has_next %}
+                                <li class="page-item">
+                                    <a class="page-link" href="?page={{ page_obj.next_page_number }}" aria-label="Next">
+                                        <span aria-hidden="true">&raquo;</span>
+                                    </a>
+                                </li>
+                                {% else %}
+                                <li class="page-item disabled">
+                                    <span class="page-link">&raquo;</span>
+                                </li>
+                                {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .card {
+        border: none;
+        border-radius: 10px;
+    }
+
+    .card-header {
+        border-bottom: 1px solid rgba(0, 0, 0, .125);
+        border-radius: 10px 10px 0 0 !important;
+    }
+
+    .shadow-sm {
+        box-shadow: 0 .125rem .25rem rgba(0, 0, 0, .075) !important;
+    }
+
+    .table> :not(caption)>*>* {
+        padding: 1rem;
+    }
+
+    .table-hover tbody tr:hover {
+        background-color: rgba(0, 0, 0, .02);
+    }
+
+    .pagination {
+        margin-bottom: 0;
+    }
+
+    .page-link {
+        color: #0d6efd;
+        border: 1px solid #dee2e6;
+        padding: 0.5rem 0.75rem;
+    }
+
+    .page-item.active .page-link {
+        background-color: #0d6efd;
+        border-color: #0d6efd;
+    }
+
+    .page-item.disabled .page-link {
+        color: #6c757d;
+        pointer-events: none;
+        background-color: #fff;
+        border-color: #dee2e6;
+    }
+</style>
+
+<script>
+    // Cập nhật dữ liệu mỗi 30 giây
+    setInterval(function () {
+        fetch('/aipredict/data/')
+            .then(response => response.json())
+            .then(data => {
+                // Cập nhật bảng với dữ liệu mới
+                location.reload();
+            });
+    }, 30000);
+</script>
+{% endblock %}

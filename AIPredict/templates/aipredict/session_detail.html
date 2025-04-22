@@ -1,0 +1,277 @@
+{% extends 'dashboard/base.html' %}
+{% load dashboard_filters %}
+
+{% block content %}
+<div class="container-fluid px-4 py-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="mb-0">Chi tiết phiên ngủ</h1>
+        <a href="{% url 'aipredict:index' %}" class="btn btn-secondary">Quay lại</a>
+    </div>
+
+    <div class="card shadow-sm mb-4">
+        <div class="card-header bg-white">
+            <h5 class="card-title mb-0">Thông tin phiên ngủ</h5>
+        </div>
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-6">
+                    <p><strong>Start Time:</strong> {{ session.start_time|add_hours:7|date:"Y-m-d H:i:s" }}</p>
+                    <p><strong>End Time:</strong> {{ session.end_time|add_hours:7|date:"Y-m-d H:i:s" }}</p>
+                    <p><strong>Duration:</strong> {{ session.duration }}</p>
+                </div>
+                <div class="col-md-6">
+                    <p class="mb-2"><strong>Chất lượng:</strong>
+                        {% if session.quality == 'GOOD' %}
+                        <span class="badge bg-success">Tốt</span>
+                        {% elif session.quality == 'MEDIUM' %}
+                        <span class="badge bg-warning">Trung bình</span>
+                        {% elif session.quality == 'BAD' %}
+                        <span class="badge bg-danger">Không tốt</span>
+                        {% else %}
+                        <span class="badge bg-secondary">Chưa phân tích</span>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <div class="col-md-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white">
+                    <h5 class="card-title mb-0">Nhịp tim theo giờ</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="heartRateChart" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white">
+                    <h5 class="card-title mb-0">SpO2 theo giờ</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="spo2Chart" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-4">
+        <div class="col-md-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white">
+                    <h5 class="card-title mb-0">Nhiệt độ theo giờ</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="temperatureChart" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card shadow-sm h-100">
+                <div class="card-header bg-white">
+                    <h5 class="card-title mb-0">Gia tốc theo giờ</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="accelerationChart" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .card {
+        border: none;
+        border-radius: 10px;
+    }
+
+    .card-header {
+        border-bottom: 1px solid rgba(0, 0, 0, .125);
+        border-radius: 10px 10px 0 0 !important;
+    }
+
+    .shadow-sm {
+        box-shadow: 0 .125rem .25rem rgba(0, 0, 0, .075) !important;
+    }
+</style>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Parse chart data from Django context
+    const chartData = JSON.parse('{{ chart_data|escapejs }}');
+
+    // Function to get color based on quality score
+    function getQualityColor(score) {
+        // Sử dụng AI model để xác định màu
+        if (score == 3) return '#28a745';  // Good
+        else if (score == 2) return '#ffc107';  // Medium
+        else return '#dc3545';  // Bad
+    }
+
+    // Function to get label based on quality score
+    function getQualityLabel(score) {
+        // Sử dụng AI model để xác định nhãn
+        if (score == 3) return 'Good';
+        else if (score == 2) return 'Medium';
+        else return 'Bad';
+    }
+
+    // // Create sleep quality chart
+    // const sleepQualityCtx = document.getElementById('sleepQualityChart').getContext('2d');
+    // new Chart(sleepQualityCtx, {
+    //     type: 'bar',
+    //     data: {
+    //         labels: chartData.hours.map(hour => `${hour}:00`),
+    //         datasets: [{
+    //             label: 'Chất lượng giấc ngủ',
+    //             data: chartData.quality_scores,
+    //             backgroundColor: chartData.quality_scores.map(score => getQualityColor(score)),
+    //             borderColor: chartData.quality_scores.map(score => getQualityColor(score).replace('0.7', '1')),
+    //             borderWidth: 1
+    //         }]
+    //     },
+    //     options: {
+    //         responsive: true,
+    //         scales: {
+    //             y: {
+    //                 beginAtZero: true,
+    //                 max: 3,
+    //                 title: {
+    //                     display: true,
+    //                     text: 'Điểm chất lượng (1-3)'
+    //                 }
+    //             }
+    //         },
+    //         plugins: {
+    //             tooltip: {
+    //                 callbacks: {
+    //                     label: function (context) {
+    //                         return `Chất lượng: ${getQualityLabel(context.raw)} (${context.raw.toFixed(1)}/3)`;
+    //                     }
+    //                 }
+    //             }
+    //         }
+    //     }
+    // });
+
+    // Create heart rate chart
+    const heartRateCtx = document.getElementById('heartRateChart').getContext('2d');
+    new Chart(heartRateCtx, {
+        type: 'line',
+        data: {
+            labels: chartData.hours.map(hour => `${hour}:00`),
+            datasets: [{
+                label: 'Nhịp tim (bpm)',
+                data: chartData.heart_rate,
+                backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 2,
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    title: {
+                        display: true,
+                        text: 'Nhịp tim (bpm)'
+                    }
+                }
+            }
+        }
+    });
+
+    // Create SpO2 chart
+    const spo2Ctx = document.getElementById('spo2Chart').getContext('2d');
+    new Chart(spo2Ctx, {
+        type: 'line',
+        data: {
+            labels: chartData.hours.map(hour => `${hour}:00`),
+            datasets: [{
+                label: 'SpO2 (%)',
+                data: chartData.spo2,
+                backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                borderColor: 'rgba(255, 99, 132, 1)',
+                borderWidth: 2,
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    title: {
+                        display: true,
+                        text: 'SpO2 (%)'
+                    }
+                }
+            }
+        }
+    });
+
+    // Create temperature chart
+    const temperatureCtx = document.getElementById('temperatureChart').getContext('2d');
+    new Chart(temperatureCtx, {
+        type: 'line',
+        data: {
+            labels: chartData.hours.map(hour => `${hour}:00`),
+            datasets: [{
+                label: 'Nhiệt độ (°C)',
+                data: chartData.temperature,
+                backgroundColor: 'rgba(255, 159, 64, 0.2)',
+                borderColor: 'rgba(255, 159, 64, 1)',
+                borderWidth: 2,
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    title: {
+                        display: true,
+                        text: 'Nhiệt độ (°C)'
+                    }
+                }
+            }
+        }
+    });
+
+    // Create acceleration chart
+    const accelerationCtx = document.getElementById('accelerationChart').getContext('2d');
+    new Chart(accelerationCtx, {
+        type: 'line',
+        data: {
+            labels: chartData.hours.map(hour => `${hour}:00`),
+            datasets: [{
+                label: 'Gia tốc (g)',
+                data: chartData.acceleration,
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderWidth: 2,
+                tension: 0.1
+            }]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: false,
+                    title: {
+                        display: true,
+                        text: 'Gia tốc (g)'
+                    }
+                }
+            }
+        }
+    });
+</script>
+{% endblock %}

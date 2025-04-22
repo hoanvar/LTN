@@ -35,11 +35,28 @@ def index(request):
     return render(request, 'dashboard/index.html', context)
 
 def sensors_view(request):
-    # Get all sensor data
-    sensor_data = SensorData.objects.all()[:50]  # Limit to last 50 readings
+    # Get page number from request, default to 1
+    page = request.GET.get('page', 1)
+    try:
+        page = int(page)
+    except ValueError:
+        page = 1
+    
+    # Limit to first 20 pages (400 records)
+    if page > 20:
+        page = 20
+    
+    # Get all sensor data with pagination
+    sensor_data = SensorData.objects.all()[(page-1)*20:page*20]
+    
+    # Calculate total pages (capped at 20)
+    total_records = SensorData.objects.count()
+    total_pages = min(20, (total_records + 19) // 20)  # Ceiling division, max 20 pages
     
     context = {
         'sensor_data': sensor_data,
+        'current_page': page,
+        'total_pages': total_pages,
     }
     
     return render(request, 'dashboard/sensors.html', context)

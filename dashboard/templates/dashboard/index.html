@@ -133,7 +133,7 @@
                 <tbody>
                     {% for data in recent_data %}
                     <tr>
-                        <td>{{ data.timestamp|date:"Y-m-d H:i:s" }}</td>
+                        <td>{{ data.timestamp|date:"Y-m-d H:i:s"|add_hours:7 }}</td>
                         <td>{{ data.heartRate|floatformat:1 }} BPM</td>
                         <td>{{ data.spo2|floatformat:1 }}%</td>
                         <td>{{ data.temperature|floatformat:1 }}°C</td>
