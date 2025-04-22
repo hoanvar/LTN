@@ -1,0 +1,162 @@
+{% extends 'dashboard/base.html' %}
+{% load dashboard_filters %}
+
+{% block content %}
+<div class="container-fluid pt-5">
+    <h1 class="h2 mb-4">Dashboard Overview</h1>
+
+    <!-- Alert Thresholds -->
+    <div class="alert alert-info alert-dismissible fade show mb-4" role="alert">
+        <h5 class="alert-heading">Current Alert Thresholds</h5>
+        <p>Heart Rate: {{ settings.heart_rate_min }} - {{ settings.heart_rate_max }} BPM |
+            SpO2: Min {{ settings.spo2_min }}% |
+            Temperature: {{ settings.temperature_min }} - {{ settings.temperature_max }}°C |
+            Acceleration: {{ settings.acceleration_min }} - {{ settings.acceleration_max }} g</p>
+        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        <a href="/settings/" class="btn btn-sm btn-outline-primary">Change Settings</a>
+    </div>
+
+    {% if latest_data %}
+    <div class="row">
+        <!-- Heart Rate Card -->
+        <div class="col-md-3 mb-4">
+            <div class="card {% if latest_data.heartRate|is_abnormal_heart_rate %}border-danger{% endif %}">
+                <div class="card-body">
+                    <h5 class="card-title">Heart Rate</h5>
+                    <p class="card-text">
+                        <i class="bi bi-heart-pulse"></i>
+                        {{ latest_data.heartRate|floatformat:1 }} BPM
+                        {% if latest_data.heartRate|is_abnormal_heart_rate %}
+                        <span class="badge bg-danger">Abnormal</span>
+                        {% endif %}
+                    </p>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- SpO2 Card -->
+        <div class="col-md-3 mb-4">
+            <div class="card {% if latest_data.spo2|is_low_spo2 %}border-danger{% endif %}">
+                <div class="card-body">
+                    <h5 class="card-title">SpO2</h5>
+                    <p class="card-text">
+                        <i class="bi bi-droplet"></i>
+                        {{ latest_data.spo2|floatformat:1 }}%
+                        {% if latest_data.spo2|is_low_spo2 %}
+                        <span class="badge bg-danger">Low</span>
+                        {% endif %}
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Temperature Card -->
+        <div class="col-md-3 mb-4">
+            <div class="card {% if latest_data.temperature|is_abnormal_temperature %}border-danger{% endif %}">
+                <div class="card-body">
+                    <h5 class="card-title">Temperature</h5>
+                    <p class="card-text">
+                        <i class="bi bi-thermometer-half"></i>
+                        {{ latest_data.temperature|floatformat:1 }}°C
+                        {% if latest_data.temperature|is_abnormal_temperature %}
+                        <span class="badge bg-danger">Abnormal</span>
+                        {% endif %}
+                    </p>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- Acceleration Card -->
+        <div class="col-md-3 mb-4">
+            <div class="card {% if latest_data.is_fall %}border-danger{% endif %}">
+                <div class="card-body">
+                    <h5 class="card-title">Acceleration</h5>
+                    <p class="card-text">
+                        <i class="bi bi-speedometer2"></i>
+                        {{ latest_data.acceleration|floatformat:1 }} g
+                        {% if latest_data.is_fall %}
+                        <span class="badge bg-danger">Fall Detected!</span>
+                        {% endif %}
+                    </p>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Section -->
+    {% if latest_data.is_fall or latest_data.is_abnormal %}
+    <div class="alert alert-danger" role="alert">
+        <h4 class="alert-heading">Warning!</h4>
+        {% if latest_data.is_fall %}
+        <p><strong>Fall Detected!</strong> Please check on the person immediately.</p>
+        {% endif %}
+        {% if latest_data.is_abnormal %}
+        <p><strong>Abnormal Vital Signs:</strong></p>
+        <ul>
+            {% if latest_data.heartRate|is_abnormal_heart_rate %}
+            <li>Heart rate is outside normal range ({{ latest_data.heartRate|floatformat:1 }} BPM). Normal range:
+                {{settings.heart_rate_min }} - {{ settings.heart_rate_max }} BPM</li>
+            {% endif %}
+            {% if latest_data.spo2|is_low_spo2 %}
+            <li>SpO2 level is low ({{ latest_data.spo2|floatformat:1 }}%). Minimum safe level: {{ settings.spo2_min }}%
+            </li>
+            {% endif %}
+            {% if latest_data.temperature|is_abnormal_temperature %}
+            <li>Temperature is abnormal ({{ latest_data.temperature|floatformat:1 }}°C). Normal range:
+                {{settings.temperature_min }} - {{ settings.temperature_max }}°C</li>
+            {% endif %}
+        </ul>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Recent Data Table -->
+    <div class="card mt-4">
+        <div class="card-header">
+            <h5 class="card-title mb-0">Recent Sensor Data</h5>
+        </div>
+        <div class="card-body">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>Heart Rate</th>
+                        <th>SpO2</th>
+                        <th>Temperature</th>
+                        <th>Acceleration</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for data in recent_data %}
+                    <tr>
+                        <td>{{ data.timestamp|date:"Y-m-d H:i:s" }}</td>
+                        <td>{{ data.heartRate|floatformat:1 }} BPM</td>
+                        <td>{{ data.spo2|floatformat:1 }}%</td>
+                        <td>{{ data.temperature|floatformat:1 }}°C</td>
+                        <td>{{ data.acceleration|floatformat:1 }} g</td>
+                        <td>
+                            {% if data.is_fall %}
+                            <span class="badge bg-danger">Fall</span>
+                            {% elif data.is_abnormal %}
+                            <span class="badge bg-warning">Abnormal</span>
+                            {% else %}
+                            <span class="badge bg-success">Normal</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <div class="alert alert-info" role="alert">
+        No sensor data available yet. Please make sure the MQTT client is running and receiving data.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

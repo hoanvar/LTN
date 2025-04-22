@@ -1,0 +1,61 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+{% load dashboard_filters %}
+
+{% block title %}Sensors{% endblock %}
+
+{% block content %}
+<div class="container-fluid pt-5">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">Sensor Readings</h3>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Heart Rate (BPM)</th>
+                                    <th>SpO2 (%)</th>
+                                    <th>Temperature (°C)</th>
+                                    <th>Acceleration (m/s²)</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for data in sensor_data %}
+                                <tr>
+                                    <td>{{ data.timestamp|date:"Y-m-d H:i:s" }}</td>
+                                    <td class="{% if data.heartRate|is_abnormal_heart_rate %}text-danger{% endif %}">
+                                        {{ data.heartRate|floatformat:1 }}
+                                    </td>
+                                    <td class="{% if data.spo2|less_than:95 %}text-danger{% endif %}">
+                                        {{ data.spo2|floatformat:1 }}
+                                    </td>
+                                    <td class="{% if data.temperature|is_abnormal_temperature %}text-danger{% endif %}">
+                                        {{ data.temperature|floatformat:1 }}
+                                    </td>
+                                    <td>{{ data.acceleration|floatformat:2 }}</td>
+                                    <td>
+                                        {% if data.is_fall %}
+                                        <span class="badge bg-danger">Fall Detected</span>
+                                        {% elif data.is_abnormal %}
+                                        <span class="badge bg-warning">Abnormal</span>
+                                        {% else %}
+                                        <span class="badge bg-success">Normal</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

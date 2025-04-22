@@ -1,0 +1,212 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Time Analysis{% endblock %}
+
+{% block content %}
+<div class="container-fluid pt-5">
+    <h1 class="h2 mb-4">Time Analysis</h1>
+
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title">Abnormal Events by Hour</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="position: relative; height:300px;">
+                        <canvas id="hourlyChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title">Fall Events by Hour</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="position: relative; height:300px;">
+                        <canvas id="hourlyFallChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title">Distribution by Day of Week</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container" style="position: relative; height:300px;">
+                        <canvas id="weekdayChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="card-title">Event Statistics</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card bg-primary text-white mb-3">
+                                <div class="card-body">
+                                    <h5 class="card-title">Total Abnormal Events</h5>
+                                    <p class="card-text fs-2">{{ total_abnormal }}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card bg-danger text-white mb-3">
+                                <div class="card-body">
+                                    <h5 class="card-title">Total Falls</h5>
+                                    <p class="card-text fs-2">{{ total_falls }}</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card bg-info text-white mb-3">
+                                <div class="card-body">
+                                    <h5 class="card-title">Average per Day</h5>
+                                    <p class="card-text fs-2">{{ avg_per_day|floatformat:1 }}</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card bg-warning text-white mb-3">
+                                <div class="card-body">
+                                    <h5 class="card-title">Peak Hour</h5>
+                                    <p class="card-text fs-2">{{ peak_hour }}:00</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Hidden data container -->
+<div id="chartData" data-hours-labels='{{ hours_labels|safe }}' data-hourly-abnormal='{{ hourly_abnormal_data|safe }}'
+    data-hourly-fall='{{ hourly_fall_data|safe }}' data-weekday-abnormal='{{ weekday_abnormal_data|safe }}'
+    data-weekday-fall='{{ weekday_fall_data|safe }}' style="display: none;">
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Get data from hidden container
+        const dataContainer = document.getElementById('chartData');
+        const hoursLabels = JSON.parse(dataContainer.dataset.hoursLabels);
+        const hourlyAbnormalData = JSON.parse(dataContainer.dataset.hourlyAbnormal);
+        const hourlyFallData = JSON.parse(dataContainer.dataset.hourlyFall);
+        const weekdayAbnormalData = JSON.parse(dataContainer.dataset.weekdayAbnormal);
+        const weekdayFallData = JSON.parse(dataContainer.dataset.weekdayFall);
+
+        // Create charts
+        // Biểu đồ 1: Sự kiện bất thường theo giờ
+        const ctx1 = document.getElementById('hourlyChart').getContext('2d');
+        new Chart(ctx1, {
+            type: 'bar',
+            data: {
+                labels: hoursLabels,
+                datasets: [{
+                    label: 'Abnormal Events',
+                    data: hourlyAbnormalData,
+                    backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0
+                        }
+                    }
+                },
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+
+        // Biểu đồ 2: Sự kiện ngã theo giờ
+        const ctx2 = document.getElementById('hourlyFallChart').getContext('2d');
+        new Chart(ctx2, {
+            type: 'bar',
+            data: {
+                labels: hoursLabels,
+                datasets: [{
+                    label: 'Fall Events',
+                    data: hourlyFallData,
+                    backgroundColor: 'rgba(255, 99, 132, 0.5)',
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0
+                        }
+                    }
+                },
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+
+        // Biểu đồ 3: Phân phối theo ngày trong tuần
+        const ctx3 = document.getElementById('weekdayChart').getContext('2d');
+        new Chart(ctx3, {
+            type: 'bar',
+            data: {
+                labels: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'],
+                datasets: [
+                    {
+                        label: 'Abnormal Events',
+                        data: weekdayAbnormalData,
+                        backgroundColor: 'rgba(54, 162, 235, 0.5)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    },
+                    {
+                        label: 'Fall Events',
+                        data: weekdayFallData,
+                        backgroundColor: 'rgba(255, 99, 132, 0.5)',
+                        borderColor: 'rgba(255, 99, 132, 1)',
+                        borderWidth: 1
+                    }
+                ]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: 0
+                        }
+                    }
+                },
+                responsive: true,
+                maintainAspectRatio: false
+            }
+        });
+    });
+</script>
+{% endblock %}

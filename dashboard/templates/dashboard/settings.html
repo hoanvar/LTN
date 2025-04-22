@@ -1,0 +1,208 @@
+{% extends 'dashboard/base.html' %}
+{% load static %}
+
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<div class="container-fluid pt-5">
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h3 class="card-title">System Settings</h3>
+                </div>
+                <div class="card-body">
+                    <!-- Status Alerts -->
+                    <div id="settingsAlert" class="alert alert-success d-none" role="alert">
+                        Settings saved successfully!
+                    </div>
+                    <div id="publishAlert" class="alert alert-info d-none" role="alert">
+                        Settings published to device.
+                    </div>
+                    <div id="warningAlert" class="alert alert-warning d-none" role="alert">
+                        Settings saved but could not publish to device.
+                    </div>
+                    <div id="errorAlert" class="alert alert-danger d-none" role="alert">
+                        Error saving settings.
+                    </div>
+
+                    <form id="settingsForm" method="post">
+                        {% csrf_token %}
+
+                        <!-- MQTT Settings -->
+                        <h4 class="mb-3">MQTT Configuration</h4>
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="mqtt_broker" class="form-label">MQTT Broker</label>
+                                    <input type="text" class="form-control" id="mqtt_broker" name="mqtt_broker"
+                                        value="{{ settings.mqtt_broker }}" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="mqtt_port" class="form-label">MQTT Port</label>
+                                    <input type="number" class="form-control" id="mqtt_port" name="mqtt_port"
+                                        value="{{ settings.mqtt_port }}" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="mqtt_topic" class="form-label">MQTT Topic</label>
+                                    <input type="text" class="form-control" id="mqtt_topic" name="mqtt_topic"
+                                        value="{{ settings.mqtt_topic }}" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="mqtt_username" class="form-label">MQTT Username</label>
+                                    <input type="text" class="form-control" id="mqtt_username" name="mqtt_username"
+                                        value="{{ settings.mqtt_username }}" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="mqtt_password" class="form-label">MQTT Password</label>
+                                    <input type="password" class="form-control" id="mqtt_password" name="mqtt_password"
+                                        value="{{ settings.mqtt_password }}" required>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Threshold Settings -->
+                        <h4 class="mb-3">Alert Thresholds</h4>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="heart_rate_min" class="form-label">Heart Rate Min (BPM)</label>
+                                    <input type="number" class="form-control" id="heart_rate_min" name="heart_rate_min"
+                                        value="{{ settings.heart_rate_min }}" step="0.1" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="heart_rate_max" class="form-label">Heart Rate Max (BPM)</label>
+                                    <input type="number" class="form-control" id="heart_rate_max" name="heart_rate_max"
+                                        value="{{ settings.heart_rate_max }}" step="0.1" required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="spo2_min" class="form-label">SpO2 Min (%)</label>
+                                    <input type="number" class="form-control" id="spo2_min" name="spo2_min"
+                                        value="{{ settings.spo2_min }}" step="0.1" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="temperature_min" class="form-label">Temperature Min (°C)</label>
+                                    <input type="number" class="form-control" id="temperature_min"
+                                        name="temperature_min" value="{{ settings.temperature_min }}" step="0.1"
+                                        required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="temperature_max" class="form-label">Temperature Max (°C)</label>
+                                    <input type="number" class="form-control" id="temperature_max"
+                                        name="temperature_max" value="{{ settings.temperature_max }}" step="0.1"
+                                        required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="acceleration_min" class="form-label">Acceleration Min (g)</label>
+                                    <input type="number" class="form-control" id="acceleration_min"
+                                        name="acceleration_min" value="{{ settings.acceleration_min }}" step="0.1"
+                                        required>
+                                </div>
+                                <div class="mb-3">
+                                    <label for="acceleration_max" class="form-label">Acceleration Max (g)</label>
+                                    <input type="number" class="form-control" id="acceleration_max"
+                                        name="acceleration_max" value="{{ settings.acceleration_max }}" step="0.1"
+                                        required>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mt-4">
+                            <button type="submit" class="btn btn-primary">Save Settings</button>
+                            <button type="button" class="btn btn-secondary" id="restartMQTT">Restart MQTT
+                                Client</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        // Form submission via AJAX
+        document.getElementById('settingsForm').addEventListener('submit', function (e) {
+            e.preventDefault();
+
+            // Clear previous alerts
+            document.querySelectorAll('.alert').forEach(alert => {
+                alert.classList.add('d-none');
+            });
+
+            const formData = new FormData(this);
+
+            fetch('/settings/', {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest'
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        document.getElementById('settingsAlert').classList.remove('d-none');
+
+                        if (data.settings_published) {
+                            document.getElementById('publishAlert').classList.remove('d-none');
+                        } else if (data.warning) {
+                            document.getElementById('warningAlert').textContent = data.warning;
+                            document.getElementById('warningAlert').classList.remove('d-none');
+                        }
+                    } else {
+                        document.getElementById('errorAlert').textContent = data.message || 'Error saving settings';
+                        document.getElementById('errorAlert').classList.remove('d-none');
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('errorAlert').textContent = 'Error: ' + error;
+                    document.getElementById('errorAlert').classList.remove('d-none');
+                });
+        });
+    });
+
+    document.getElementById('restartMQTT').addEventListener('click', function () {
+        if (confirm('Are you sure you want to restart the MQTT client? This will temporarily disconnect from the broker.')) {
+            // Clear previous alerts
+            document.querySelectorAll('.alert').forEach(alert => {
+                alert.classList.add('d-none');
+            });
+
+            fetch('/api/restart-mqtt/', {
+                method: 'POST',
+                headers: {
+                    'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value
+                }
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        document.getElementById('settingsAlert').textContent = 'MQTT client restarted successfully';
+                        document.getElementById('settingsAlert').classList.remove('d-none');
+
+                        if (data.settings_published) {
+                            document.getElementById('publishAlert').classList.remove('d-none');
+                        } else {
+                            document.getElementById('warningAlert').textContent = 'MQTT client restarted but could not publish settings to device';
+                            document.getElementById('warningAlert').classList.remove('d-none');
+                        }
+                    } else {
+                        document.getElementById('errorAlert').textContent = 'Failed to restart MQTT client: ' + (data.message || 'Unknown error');
+                        document.getElementById('errorAlert').classList.remove('d-none');
+                    }
+                })
+                .catch(error => {
+                    document.getElementById('errorAlert').textContent = 'Error restarting MQTT client: ' + error;
+                    document.getElementById('errorAlert').classList.remove('d-none');
+                });
+        }
+    });
+</script>
+{% endblock %}
