@@ -73,17 +73,8 @@
                     </a>
                 </li>
                 <li class="nav-item">
-                    <a class="nav-link {% if request.resolver_match.url_name == 'time_analysis' %}active{% endif %}"
-                        href="{% url 'time_analysis' %}">
-                        <i class="fas fa-clock"></i>
-                        <span>Time Analysis</span>
-                    </a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link {% if request.resolver_match.url_name == 'sleep_analysis' %}active{% endif %}"
-                        href="{% url 'sleep_analysis' %}">
-                        <i class="fas fa-moon"></i>
-                        <span>Sleep Analysis</span>
+                    <a class="nav-link" href="/time-analysis">
+                        <i class="bi bi-clock-history"></i> Time Analysis
                     </a>
                 </li>
                 <li class="nav-item">

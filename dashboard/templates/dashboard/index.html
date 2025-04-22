@@ -97,16 +97,16 @@
         <p><strong>Abnormal Vital Signs:</strong></p>
         <ul>
             {% if latest_data.heartRate|is_abnormal_heart_rate %}
-            <li>Heart rate is outside normal range ({{ latest_data.heartRate|floatformat:1 }} BPM). Normal range:
-                {{settings.heart_rate_min }} - {{ settings.heart_rate_max }} BPM</li>
+            <li>Heart rate is outside normal range ({{ latest_data.heartRate|floatformat:1 }} BPM). Normal range: {{
+                settings.heart_rate_min }} - {{ settings.heart_rate_max }} BPM</li>
             {% endif %}
             {% if latest_data.spo2|is_low_spo2 %}
             <li>SpO2 level is low ({{ latest_data.spo2|floatformat:1 }}%). Minimum safe level: {{ settings.spo2_min }}%
             </li>
             {% endif %}
             {% if latest_data.temperature|is_abnormal_temperature %}
-            <li>Temperature is abnormal ({{ latest_data.temperature|floatformat:1 }}°C). Normal range:
-                {{settings.temperature_min }} - {{ settings.temperature_max }}°C</li>
+            <li>Temperature is abnormal ({{ latest_data.temperature|floatformat:1 }}°C). Normal range: {{
+                settings.temperature_min }} - {{ settings.temperature_max }}°C</li>
             {% endif %}
         </ul>
         {% endif %}

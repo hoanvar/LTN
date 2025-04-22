@@ -9,5 +9,4 @@ urlpatterns = [
     path('time-analysis/', views.time_analysis_view, name='time_analysis'),
     path('settings/', views.settings_view, name='settings'),
     path('api/restart-mqtt/', views.restart_mqtt, name='restart_mqtt'),
-    path('sleep-analysis/', views.sleep_analysis, name='sleep_analysis'),
 ] 

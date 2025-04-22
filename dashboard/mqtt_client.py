@@ -1,11 +1,10 @@
 import paho.mqtt.client as mqtt
 import json
-from datetime import datetime, timedelta
-import pytz
-from .models import SensorData, Settings, SleepSession
-from django.db.models import Avg
+from .models import SensorData, Settings
+from django.utils import timezone
 import threading
 import time
+from .email_utils import send_fall_alert
 
 # Global MQTT client
 mqtt_client = None
@@ -16,178 +15,6 @@ client_id = f"dashboard_client_{int(time.time())}"  # Client ID cố định
 # Biến theo dõi tin nhắn đã xử lý để tránh lặp lại
 processed_messages = set()
 MAX_PROCESSED_MESSAGES = 100  # Giới hạn kích thước để tránh memory leak
-
-class MQTTClient:
-    def __init__(self):
-        self.client = mqtt.Client()
-        self.client.on_connect = self.on_connect
-        self.client.on_message = self.on_message
-        self.is_connected = False
-        self.settings = None
-        self.sleep_data = {
-            'is_sleeping': False,
-            'start_time': None,
-        }
-        self.acceleration_buffer = []
-        self.movement_threshold = 0.2  # Ngưỡng phát hiện chuyển động (0.2g)
-        self.deep_sleep_threshold = 0.1  # Ngưỡng phát hiện ngủ sâu (0.1g)
-        self.buffer_size = 300  # Kích thước buffer cho 5 phút (300 giây)
-
-    def connect(self):
-        try:
-            # Lấy settings từ database
-            self.settings = Settings.objects.first()
-            if not self.settings:
-                print("No settings found in database")
-                return False
-
-            # Thiết lập TLS
-            self.client.tls_set()
-            self.client.username_pw_set(self.settings.mqtt_username, self.settings.mqtt_password)
-            
-            # Kết nối tới broker
-            self.client.connect(self.settings.mqtt_broker, self.settings.mqtt_port, 60)
-            self.client.loop_start()
-            return True
-        except Exception as e:
-            print(f"Error connecting to MQTT broker: {e}")
-            return False
-
-    def on_connect(self, client, userdata, flags, rc):
-        if rc == 0:
-            print("Connected to MQTT broker")
-            self.is_connected = True
-            self.client.subscribe(self.settings.mqtt_topic)
-            self.client.subscribe("sleep")  # Subscribe to sleep topic
-        else:
-            print(f"Failed to connect to MQTT broker with code: {rc}")
-            self.is_connected = False
-
-    def analyze_sleep(self, acceleration_data):
-        """Phân tích dữ liệu giấc ngủ từ buffer acceleration"""
-        if not acceleration_data:
-            return None, 0, 0, 0, 0
-
-        # Tính toán các thông số
-        total_samples = len(acceleration_data)
-        deep_sleep_samples = sum(1 for acc in acceleration_data if abs(acc - 1.0) < self.deep_sleep_threshold)
-        wake_samples = sum(1 for acc in acceleration_data if abs(acc - 1.0) > self.movement_threshold)
-        light_sleep_samples = total_samples - deep_sleep_samples - wake_samples
-
-        # Tính thời lượng (giả sử mỗi sample cách nhau 1 giây)
-        deep_sleep_duration = timedelta(seconds=deep_sleep_samples)
-        light_sleep_duration = timedelta(seconds=light_sleep_samples)
-        wake_duration = timedelta(seconds=wake_samples)
-        total_duration = timedelta(seconds=total_samples)
-
-        # Tính điểm chất lượng giấc ngủ
-        deep_sleep_score = (deep_sleep_samples / total_samples) * 100
-        wake_score = (wake_samples / total_samples) * 100
-        movement_count = wake_samples
-
-        # Xác định chất lượng giấc ngủ
-        if deep_sleep_score >= 20 and wake_score <= 15:
-            quality = 'GOOD'
-        elif deep_sleep_score >= 10 and wake_score <= 25:
-            quality = 'AVERAGE'
-        else:
-            quality = 'BAD'
-
-        return quality, total_duration, deep_sleep_duration, light_sleep_duration, wake_duration, movement_count
-
-    def on_message(self, client, userdata, msg):
-        try:
-            if msg.topic == "sleep":
-                # Xử lý tín hiệu bắt đầu/kết thúc ngủ
-                payload = msg.payload.decode()
-                if payload == "1" and not self.sleep_data['is_sleeping']:
-                    # Bắt đầu ngủ
-                    self.sleep_data['is_sleeping'] = True
-                    self.sleep_data['start_time'] = datetime.now(pytz.UTC)
-                    self.acceleration_buffer = []
-                    print("Sleep session started")
-                elif payload == "0" and self.sleep_data['is_sleeping']:
-                    # Kết thúc ngủ
-                    end_time = datetime.now(pytz.UTC)
-                    if len(self.acceleration_buffer) > 0:
-                        # Phân tích dữ liệu giấc ngủ
-                        quality, total_duration, deep_duration, light_duration, wake_duration, movement_count = self.analyze_sleep(self.acceleration_buffer)
-                        
-                        # Lưu phiên ngủ vào database
-                        SleepSession.objects.create(
-                            start_time=self.sleep_data['start_time'],
-                            end_time=end_time,
-                            quality=quality,
-                            total_duration=total_duration,
-                            deep_sleep_duration=deep_duration,
-                            light_sleep_duration=light_duration,
-                            wake_duration=wake_duration,
-                            avg_acceleration=sum(self.acceleration_buffer) / len(self.acceleration_buffer),
-                            movement_count=movement_count
-                        )
-                        print(f"Sleep session ended. Quality: {quality}")
-                    
-                    # Reset trạng thái
-                    self.sleep_data['is_sleeping'] = False
-                    self.sleep_data['start_time'] = None
-                    self.acceleration_buffer = []
-                return
-
-            # Xử lý dữ liệu sensor thông thường
-            payload = json.loads(msg.payload.decode())
-            timestamp = datetime.fromtimestamp(payload['timestamp'], pytz.UTC)
-            
-            # Lấy ngưỡng từ settings
-            heart_rate_min = self.settings.heart_rate_min
-            heart_rate_max = self.settings.heart_rate_max
-            spo2_min = self.settings.spo2_min
-            temperature_min = self.settings.temperature_min
-            temperature_max = self.settings.temperature_max
-            acceleration_min = self.settings.acceleration_min
-            acceleration_max = self.settings.acceleration_max
-
-            # Kiểm tra giá trị bất thường
-            is_abnormal = (
-                payload['heartRate'] < heart_rate_min or
-                payload['heartRate'] > heart_rate_max or
-                payload['spo2'] < spo2_min or
-                payload['temperature'] < temperature_min or
-                payload['temperature'] > temperature_max
-            )
-
-            # Kiểm tra ngã
-            is_fall = (
-                payload['acceleration'] < acceleration_min or
-                payload['acceleration'] > acceleration_max
-            )
-
-            # Lưu dữ liệu vào database
-            SensorData.objects.create(
-                timestamp=timestamp,
-                heartRate=payload['heartRate'],
-                spo2=payload['spo2'],
-                temperature=payload['temperature'],
-                acceleration=payload['acceleration'],
-                is_abnormal=is_abnormal,
-                is_fall=is_fall
-            )
-
-            # Nếu đang trong phiên ngủ, thêm acceleration vào buffer
-            if self.sleep_data['is_sleeping']:
-                self.acceleration_buffer.append(payload['acceleration'])
-                # Giới hạn kích thước buffer
-                if len(self.acceleration_buffer) > self.buffer_size:
-                    self.acceleration_buffer.pop(0)
-
-        except Exception as e:
-            print(f"Error processing message: {e}")
-
-    def disconnect(self):
-        if self.is_connected:
-            self.client.loop_stop()
-            self.client.disconnect()
-            self.is_connected = False
-            print("Disconnected from MQTT broker")
 
 def get_settings():
     settings, _ = Settings.objects.get_or_create(pk=1)
@@ -202,66 +29,57 @@ def on_connect(client, userdata, flags, rc):
 
 def on_message(client, userdata, msg):
     try:
-        # Tạo message ID dựa trên nội dung và thời gian
-        message_content = msg.payload.decode()
-        message_id = f"{message_content}_{int(time.time() / 10)}"  # Phân nhóm theo 10 giây
-        
-        # Kiểm tra nếu đã xử lý tin nhắn này
-        with mqtt_lock:
-            if message_id in processed_messages:
-                print(f"Skipping duplicate message: {message_content[:30]}...")
-                return
-            
-            # Thêm vào danh sách đã xử lý
-            processed_messages.add(message_id)
-            
-            # Giới hạn kích thước của set
-            if len(processed_messages) > MAX_PROCESSED_MESSAGES:
-                # Xóa phần tử cũ nhất (giả định là phần tử đầu tiên)
-                processed_messages.pop()
-        
-        payload = json.loads(message_content)
-        print(f"Processing message: {payload}")  # Debug print
-        
+        payload = json.loads(msg.payload.decode())
+        print(f"Received message: {payload}")
+
         # Skip if any sensor value is 0
-        if (payload['heartRate'] == 0 or 
-            payload['spo2'] == 0 or 
-            payload['temperature'] == 0 or 
-            payload['acceleration'] == 0):
+        if any(value == 0 for value in [
+            payload.get('heartRate', 0),
+            payload.get('spo2', 0),
+            payload.get('temperature', 0),
+            payload.get('acceleration', 0)
+        ]):
             print("Skipping data with zero values")
             return
-        
-        # Get current settings
-        settings = get_settings()
-        
-        # Check for fall condition
-        is_fall = (payload['acceleration'] > settings.acceleration_max or 
-                  payload['acceleration'] < settings.acceleration_min)
-        
-        # Check for abnormal conditions
-        is_abnormal = (
-            payload['heartRate'] < settings.heart_rate_min or 
-            payload['heartRate'] > settings.heart_rate_max or
-            payload['spo2'] < settings.spo2_min or
-            payload['temperature'] < settings.temperature_min or 
-            payload['temperature'] > settings.temperature_max
-        )
-        
-        # Save to database with current timestamp
-        SensorData.objects.create(
+
+        # Create sensor data object
+        sensor_data = SensorData(
             timestamp=timezone.now(),
-            heartRate=payload['heartRate'],
-            spo2=payload['spo2'],
-            temperature=payload['temperature'],
-            acceleration=payload['acceleration'],
-            is_fall=is_fall,
-            is_abnormal=is_abnormal
+            heartRate=payload.get('heartRate', 0),
+            spo2=payload.get('spo2', 0),
+            temperature=payload.get('temperature', 0),
+            acceleration=payload.get('acceleration', 0)
         )
-        print(f"Data saved successfully: {payload}")  # Debug print
-        
+
+        # Check for abnormal values
+        settings = Settings.objects.first()
+        if settings:
+            # Check for fall detection
+            if sensor_data.acceleration >= settings.acceleration_max or sensor_data.acceleration <= settings.acceleration_min:
+                print("Fall detected!")
+                sensor_data.is_fall = True
+                # Send email alert
+                send_fall_alert(sensor_data)
+
+            # Check other vital signs
+            if (sensor_data.heartRate < settings.heart_rate_min or 
+                sensor_data.heartRate > settings.heart_rate_max):
+                sensor_data.is_abnormal = True
+            elif (sensor_data.spo2 < settings.spo2_min or 
+                  sensor_data.spo2 > settings.spo2_max):
+                sensor_data.is_abnormal = True
+            elif (sensor_data.temperature < settings.temperature_min or 
+                  sensor_data.temperature > settings.temperature_max):
+                sensor_data.is_abnormal = True
+
+        # Save to database
+        sensor_data.save()
+        print(f"Saved sensor data: {sensor_data}")
+
+    except json.JSONDecodeError:
+        print("Error decoding JSON message")
     except Exception as e:
-        print(f"Error processing message: {e}")
-        print(f"Payload content: {msg.payload.decode()}")  # Debug print
+        print(f"Error processing message: {str(e)}")
 
 def publish_settings():
     """Publish current threshold settings to the device"""
@@ -338,15 +156,30 @@ def start_mqtt_client():
         settings = get_settings()
         
         # Create new client
-        mqtt_client = MQTTClient()
+        mqtt_client = mqtt.Client(client_id=client_id)  # Sử dụng client ID cố định
+        mqtt_client.on_connect = on_connect
+        mqtt_client.on_message = on_message
         
-        # Start client in a separate thread using loop_forever
-        mqtt_thread = threading.Thread(target=mqtt_loop, args=(mqtt_client,))
-        mqtt_thread.daemon = True
-        mqtt_thread.start()
+        # Set authentication
+        mqtt_client.username_pw_set(settings.mqtt_username, settings.mqtt_password)
         
-        print(f"MQTT client started successfully with client ID: {client_id}")
-        return True
+        # Set TLS/SSL
+        mqtt_client.tls_set()
+        
+        try:
+            # Connect to broker
+            mqtt_client.connect(settings.mqtt_broker, settings.mqtt_port, 60)
+            
+            # Start client in a separate thread using loop_forever
+            mqtt_thread = threading.Thread(target=mqtt_loop, args=(mqtt_client,))
+            mqtt_thread.daemon = True
+            mqtt_thread.start()
+            
+            print(f"MQTT client started successfully with client ID: {client_id}")
+            return True
+        except Exception as e:
+            print(f"Error connecting to MQTT broker: {e}")
+            return False
 
 def restart_mqtt_client():
     """Restart the MQTT client with current settings"""

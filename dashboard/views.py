@@ -2,7 +2,7 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from django.utils import timezone
 from datetime import timedelta
-from .models import SensorData, Settings, SleepSession
+from .models import SensorData, Settings
 from django.db.models import Avg, Count
 import logging
 from django.db import connection
@@ -546,6 +546,10 @@ def settings_view(request):
         settings.acceleration_min = float(request.POST.get('acceleration_min'))
         settings.acceleration_max = float(request.POST.get('acceleration_max'))
         
+        # Update email list
+        email_list = request.POST.get('email_list', '')
+        settings.email_list = email_list
+        
         settings.save()
         
         # Publish new settings to the device via MQTT
@@ -655,90 +659,3 @@ def time_analysis_view(request):
     }
     
     return render(request, 'dashboard/time_analysis.html', context)
-
-def sleep_analysis(request):
-    # Get recent sleep sessions
-    recent_sessions = SleepSession.objects.all().order_by('-start_time')[:10]
-
-    # Calculate sleep quality distribution
-    quality_distribution = [
-        SleepSession.objects.filter(quality='GOOD').count(),
-        SleepSession.objects.filter(quality='AVERAGE').count(),
-        SleepSession.objects.filter(quality='BAD').count()
-    ]
-
-    # Calculate average statistics
-    avg_duration = SleepSession.objects.aggregate(Avg('total_duration'))['total_duration__avg']
-    if avg_duration:
-        avg_duration = str(avg_duration).split('.')[0]  # Format as HH:MM:SS
-    else:
-        avg_duration = "00:00:00"
-
-    total_sessions = SleepSession.objects.count()
-    good_sleep_rate = 0
-    if total_sessions > 0:
-        good_sleep_rate = (SleepSession.objects.filter(quality='GOOD').count() / total_sessions) * 100
-
-    # Calculate average deep sleep percentage
-    avg_deep_sleep = SleepSession.objects.aggregate(
-        avg_deep=Avg('deep_sleep_duration')
-    )['avg_deep']
-    
-    avg_deep_sleep_percentage = 0
-    if avg_deep_sleep and avg_duration != "00:00:00":
-        try:
-            avg_deep_sleep_percentage = (avg_deep_sleep.total_seconds() / avg_duration.total_seconds()) * 100
-        except (AttributeError, TypeError):
-            avg_deep_sleep_percentage = 0
-
-    # Calculate average movements
-    avg_movements = SleepSession.objects.aggregate(Avg('movement_count'))['movement_count__avg'] or 0
-
-    # Prepare duration trend data
-    last_7_days = timezone.now() - timedelta(days=7)
-    daily_sessions = SleepSession.objects.filter(
-        start_time__gte=last_7_days
-    ).order_by('start_time')
-
-    duration_trend = {
-        'dates': [],
-        'durations': []
-    }
-
-    for session in daily_sessions:
-        duration_trend['dates'].append(session.start_time.strftime('%Y-%m-%d'))
-        if session.total_duration:
-            duration_trend['durations'].append(session.total_duration.total_seconds() / 3600)  # Convert to hours
-        else:
-            duration_trend['durations'].append(0)
-
-    # Calculate average stages distribution
-    stages_distribution = [0, 0, 0]  # Default values for deep, light, and wake
-    if avg_duration != "00:00:00":
-        try:
-            deep_sleep_avg = SleepSession.objects.aggregate(Avg('deep_sleep_duration'))['deep_sleep_duration__avg']
-            light_sleep_avg = SleepSession.objects.aggregate(Avg('light_sleep_duration'))['light_sleep_duration__avg']
-            wake_avg = SleepSession.objects.aggregate(Avg('wake_duration'))['wake_duration__avg']
-            
-            if deep_sleep_avg and light_sleep_avg and wake_avg:
-                total_seconds = avg_duration.total_seconds()
-                stages_distribution = [
-                    (deep_sleep_avg.total_seconds() / total_seconds) * 100,
-                    (light_sleep_avg.total_seconds() / total_seconds) * 100,
-                    (wake_avg.total_seconds() / total_seconds) * 100
-                ]
-        except (AttributeError, TypeError):
-            pass
-
-    context = {
-        'recent_sessions': recent_sessions,
-        'quality_distribution': json.dumps(quality_distribution),
-        'duration_trend': json.dumps(duration_trend),
-        'stages_distribution': json.dumps(stages_distribution),
-        'avg_duration': avg_duration,
-        'good_sleep_rate': round(good_sleep_rate, 1),
-        'avg_deep_sleep': round(avg_deep_sleep_percentage, 1),
-        'avg_movements': round(avg_movements, 1)
-    }
-
-    return render(request, 'dashboard/sleep_analysis.html', context)

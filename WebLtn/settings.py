@@ -151,3 +151,11 @@ LOGGING = {
         },
     },
 }
+
+# Email Configuration
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = 'smtp.gmail.com'
+EMAIL_PORT = 587
+EMAIL_USE_TLS = True
+EMAIL_HOST_USER = 'vuhoan159357@gmail.com'  # Thay bằng email của bạn
+EMAIL_HOST_PASSWORD = 'hiwu cokq rllr rdsb'  # Thay bằng mật khẩu ứng dụng từ Google
